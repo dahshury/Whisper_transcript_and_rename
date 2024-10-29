@@ -1,16 +1,27 @@
-import os
-import subprocess
-from transformers import pipeline
-from transformers.utils import is_flash_attn_2_available
 import torch
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+import os
 
-# Load the Whisper model with appropriate settings
+
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+model_id = "openai/whisper-large-v3-turbo"
+
+model = AutoModelForSpeechSeq2Seq.from_pretrained(
+    model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+)
+model.to(device)
+
+processor = AutoProcessor.from_pretrained(model_id)
+
 model = pipeline(
     "automatic-speech-recognition",
-    model="openai/whisper-large-v3",
-    torch_dtype=torch.float16,
-    device="cuda:0",
-    model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {"attn_implementation": "sdpa"},
+    model=model,
+    tokenizer=processor.tokenizer,
+    feature_extractor=processor.feature_extractor,
+    torch_dtype=torch_dtype,
+    device=device,
 )
 
 # Function to transcribe and rename files
