@@ -1,6 +1,6 @@
 # Whisper_transcript_and_rename
 
-A simple script that uses OpenAI's Whisper model to transcribe a folder containing multiple voice lines and renames the files based on their corresponding transcriptions. If a transcription exceeds the maximum file length, the script truncates the filename to fit within the allowed limit.
+A script that uses OpenAI's Whisper turbo model to transcribe a folder containing multiple voice lines and renames the files based on their corresponding transcriptions. If a transcription exceeds the maximum file length, the script truncates the filename to fit within the allowed limit.
 
 ---
 
@@ -14,58 +14,42 @@ A simple script that uses OpenAI's Whisper model to transcribe a folder containi
 ## Requirements
 
 1. **Python 3.x**
-2. **Torch** (with GPU support recommended for better performance)
-3. **Whisper** (OpenAI's pre-trained model)
+2. **ONNXRuntime** (with optional GPU support)
+3. **Whisper dependencies**
 4. **ffmpeg** (for audio file processing)
 
 ---
 
 ## Installation
 
-### 1. Install Python and Torch (with GPU support)
-Follow the instructions from the [official PyTorch website](https://pytorch.org/get-started/locally/) to install Torch with GPU support. Example for CUDA installation:
+### 1. Install Dependencies
 
-```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
-```
+Use `requirements.txt` or `requirements-gpu.txt` based on your system:
 
-### 2. Install Whisper
-Use the following command to install Whisper:
+- **For CPU-only systems**:
+  ```bash
+  pip install -r requirements.txt
+  ```
 
-```bash
-pip install git+https://github.com/openai/whisper.git
-```
+- **For GPU-enabled systems**:
+  ```bash
+  pip install -r requirements-gpu.txt
+  ```
 
-### 3. Install `ffmpeg`
-Whisper requires `ffmpeg` to process audio files.
-
-#### On Windows:
-- Download `ffmpeg` from [ffmpeg.org](https://ffmpeg.org/download.html).
-- Extract the folder and add the `bin` folder to your system's PATH. 
-
-#### On macOS (with Homebrew):
-```bash
-brew install ffmpeg
-```
-
-#### On Linux:
-```bash
-sudo apt update
-sudo apt install ffmpeg
-```
+These files include dependencies for Whisper, ONNXRuntime, and other required libraries.
 
 ---
 
 ## Usage
 
-### 1. Clone the repository
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/dahshury/Whisper_transcript_and_rename.git
 cd Whisper_transcript_and_rename
 ```
 
-### 2. Transcribe and rename files
+### 2. Transcribe and Rename Files
 
 Run the script using the command below, replacing `<input_folder>` with the path to your folder of audio files:
 
@@ -112,4 +96,3 @@ Feel free to submit issues or pull requests to contribute to this project.
 ## License
 
 This project is licensed under the MIT License.
-```
