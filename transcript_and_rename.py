@@ -9,7 +9,7 @@ import librosa
 
 
 class WhisperONNXTranscriber:
-    def __init__(self, onnx_path, q=None if 'CUDAExecutionProvider' in ort.get_available_providers() else "quantized"):
+    def __init__(self, onnx_path, q=None if 'CUDAExecutionProvider' in ort.get_available_providers() else "q4f16"):
         self.onnx_path = onnx_path
         self.q = q
 
