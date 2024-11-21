@@ -9,7 +9,7 @@ import librosa
 
 
 class WhisperONNXTranscriber:
-    def __init__(self, onnx_path, q=None if 'CUDAExecutionProvider' in ort.get_available_providers() else "q4f16"):
+    def __init__(self, onnx_path, q=None if 'CUDAExecutionProvider' in ort.get_available_providers() else "quantized"):
         self.onnx_path = onnx_path
         self.q = q
 
@@ -17,8 +17,7 @@ class WhisperONNXTranscriber:
         self.onnx_folder = os.path.join(self.onnx_path, "onnx")
 
         self.encoder_name = "encoder_model.onnx" if self.q is None else f"encoder_model_{self.q}.onnx"
-        self.decoder_name = "decoder_model.onnx" if self.q is None else f"decoder_model_{self.q}.onnx"
-
+        self.decoder_name = "decoder_with_past_model.onnx" if self.q is None else f"decoder_model_merged_{self.q}.onnx"
         # Ensure models are downloaded
         self.download_and_prepare_models()
 
@@ -153,6 +152,21 @@ class WhisperONNXTranscriber:
         batch_size = encoder_hidden_states.shape[0]
         decoder_input_ids = np.array([[self.generation_config["decoder_start_token_id"]]] * batch_size, dtype=np.int64)
 
+        # Initialize past key values with correct dimensions from config
+        num_layers = self.config['decoder_layers']
+        num_attention_heads = self.config['decoder_attention_heads']
+        head_dim = self.config['d_model'] // num_attention_heads
+
+        past_key_values = []
+        for _ in range(num_layers):
+            # Create 4D tensors for past key and value for both decoder and encoder
+            past_decoder_key = np.zeros((batch_size, num_attention_heads, 0, head_dim), dtype=np.float32)
+            past_decoder_value = np.zeros((batch_size, num_attention_heads, 0, head_dim), dtype=np.float32)
+            past_encoder_key = np.zeros((batch_size, num_attention_heads, 0, head_dim), dtype=np.float32)
+            past_encoder_value = np.zeros((batch_size, num_attention_heads, 0, head_dim), dtype=np.float32)
+            
+            past_key_values.append((past_decoder_key, past_decoder_value, past_encoder_key, past_encoder_value))
+
         output_ids = []
         max_length = self.generation_config.get("max_length", 448)
 
@@ -160,28 +174,61 @@ class WhisperONNXTranscriber:
             # Prepare decoder inputs
             decoder_inputs = {
                 "input_ids": decoder_input_ids,
-                "encoder_hidden_states": encoder_hidden_states.astype(np.float32)  # Ensure float32
+                "use_cache_branch": np.array([False], dtype=np.bool_)
             }
 
-            # Run decoder
-            decoder_outputs = self.decoder_session.run(None, decoder_inputs)
-            next_token_logits = decoder_outputs[0][:, -1, :]
-            next_tokens = np.argmax(next_token_logits, axis=-1)
+            # Add past key values to inputs
+            for layer in range(num_layers):
+                decoder_inputs.update({
+                    f"past_key_values.{layer}.decoder.key": past_key_values[layer][0],
+                    f"past_key_values.{layer}.decoder.value": past_key_values[layer][1],
+                    f"past_key_values.{layer}.encoder.key": past_key_values[layer][2],
+                    f"past_key_values.{layer}.encoder.value": past_key_values[layer][3]
+                })
 
-            # Append tokens
-            output_ids.append(next_tokens)
+            # Add encoder hidden states and encoder attention mask
+            decoder_inputs["encoder_hidden_states"] = encoder_hidden_states.astype(np.float32)
+            if attention_mask is not None:
+                decoder_inputs["encoder_attention_mask"] = attention_mask.astype(np.int64)
 
-            # Update decoder input ids
-            decoder_input_ids = np.concatenate(
-                [decoder_input_ids, next_tokens[:, None]], axis=-1
-            )
+            try:
+                # Run decoder
+                decoder_outputs = self.decoder_session.run(None, decoder_inputs)
+                
+                # Extract next token logits 
+                # Assuming the first output is the logits
+                next_token_logits = decoder_outputs[0][:, -1, :]
+                next_tokens = np.argmax(next_token_logits, axis=-1)
 
-            # Check for end of sequence
-            if next_tokens[0] == self.generation_config["eos_token_id"]:
+                # Extract updated past key values
+                updated_past_key_values = []
+                for layer in range(num_layers):
+                    updated_past_key_values.append((
+                        decoder_outputs[layer * 4 + 1],  # decoder key
+                        decoder_outputs[layer * 4 + 2],  # decoder value
+                        decoder_outputs[layer * 4 + 3],  # encoder key
+                        decoder_outputs[layer * 4 + 4]   # encoder value
+                    ))
+                past_key_values = updated_past_key_values
+
+                # Append tokens
+                output_ids.append(next_tokens)
+
+                # Update decoder input ids
+                decoder_input_ids = np.concatenate(
+                    [decoder_input_ids, next_tokens[:, None]], axis=-1
+                )
+
+                # Check for end of sequence
+                if np.all(next_tokens == self.generation_config["eos_token_id"]):
+                    break
+
+            except Exception as e:
+                print(f"Error in decoder iteration: {e}")
                 break
 
         return np.array(output_ids, dtype=np.int64).T  # Ensure int64
-
+    
     def postprocess(self, output_ids):
         # Convert output_ids to list for the processor
         output_ids_list = output_ids.tolist()
@@ -258,8 +305,7 @@ def transcribe_and_rename_files(folder_path, onnx_path, q=None, max_length=250):
                     print(f"Error processing {filename}: {str(e)}")
                     continue
 
-
 # Example usage
 folder_path = "C:/Users/MASTER/Desktop/All_fac_yuri_audio"
 onnx_path = "./whisper-large-v3-turbo-onnx"  # Path to the ONNX model files
-transcribe_and_rename_files(folder_path, onnx_path, q="quantized", max_length=100)
+transcribe_and_rename_files(folder_path, onnx_path, q="quantized", max_length=200)
